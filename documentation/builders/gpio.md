@@ -366,6 +366,25 @@ output_devices:
       pin: 18
 ```
 
+### Playback LED Strip
+
+Have an LED strip (or single LED) that fades in/out with music playback. The LED fades in slowly (over 2 seconds) 
+when a song starts and fades out (over 2 seconds) when a song ends. When the jukebox is ready at startup, 
+the LED pulses once for 1 second. This is ideal for LED strips controlled via a transistor connected to a GPIO pin.
+
+```yml
+output_devices:
+  PlaybackLED:
+    type: PWMLED
+    connect: gpio.gpioz.plugin.connectivity.register_playback_led_callback
+    kwargs:
+      pin: 18
+```
+
+**Hardware setup:** Connect your LED strip through a transistor (e.g., 2N2222 or TIP120) to the GPIO pin. 
+The transistor acts as a switch controlled by the PWM signal from the GPIO pin, allowing you to control 
+high-power LED strips safely.
+
 ### Color Volume LED
 
 Have an RGBLED change it's color to reflect the current volume level. It also flashes when minimum or maximum

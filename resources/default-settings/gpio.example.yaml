@@ -21,6 +21,14 @@ output_devices:
     connect: gpio.gpioz.plugin.connectivity.register_volume_led_callback
     kwargs:
       pin: 18
+  PlaybackLED:
+    # Have an LED strip fade in/out with music playback.
+    # Fades in when a song starts, fades out when a song ends.
+    # Pulses once on startup. Ideal for LED strips via transistor.
+    type: PWMLED
+    connect: gpio.gpioz.plugin.connectivity.register_playback_led_callback
+    kwargs:
+      pin: 22
 input_devices:
   TogglePlayback:
     # A button to toggle music playback on single press

@@ -222,3 +222,88 @@ def register_volume_rgbled_callback(device):
 
     components.volume.pulse_control.on_volume_change_callbacks.register(
         _check_device_type(device, [RGBLED], audio_volume_change_callback))
+
+
+def register_playback_led_callback(device):
+    """
+    Control an LED strip that fades in/out with music playback.
+
+    The LED fades in slowly when a song starts and fades out when a song ends.
+    On startup when the jukebox is ready, the LED pulses once for 1 second.
+
+    Compatible devices:
+
+    * :class:`components.gpio.gpioz.core.output_devices.PWMLED`
+    """
+    import threading
+    import time
+    import jukebox.publishing as publishing
+
+    # Track the current song to detect changes
+    current_song = {'file': None, 'state': None}
+    fade_lock = threading.Lock()
+    fade_in_time = 2.0  # Seconds for fade in
+    fade_out_time = 2.0  # Seconds for fade out
+
+    def status_callback(state):
+        """Pulse the LED once when the jukebox is ready"""
+        if state == 1:
+            # Pulse once for 1 second with fade in/out
+            device.pulse(fade_in_time=0.3, fade_out_time=0.3, n=1, background=True)
+
+    def fade_in():
+        """Fade in the LED over fade_in_time seconds"""
+        device.pulse(fade_in_time=fade_in_time, fade_out_time=0, n=1, background=False)
+        device.on()  # Keep it on after fading in
+
+    def fade_out():
+        """Fade out the LED over fade_out_time seconds"""
+        device.pulse(fade_in_time=0, fade_out_time=fade_out_time, n=1, background=False)
+
+    def playerstatus_callback(topic, status):
+        """Handle player status updates to fade LED on song changes"""
+        if not isinstance(status, dict):
+            return
+
+        with fade_lock:
+            new_file = status.get('file')
+            new_state = status.get('state')
+
+            # Detect song change - fade in when a new song starts
+            if new_file != current_song['file'] and new_file is not None:
+                if new_state == 'play':
+                    # Start fade in on a new thread
+                    threading.Thread(target=fade_in, daemon=True).start()
+                current_song['file'] = new_file
+                current_song['state'] = new_state
+
+            # Detect playback state change
+            elif new_state != current_song['state']:
+                if new_state == 'stop' and current_song['state'] in ['play', 'pause']:
+                    # Song ended - fade out
+                    threading.Thread(target=fade_out, daemon=True).start()
+                current_song['state'] = new_state
+
+    # Subscribe to player status updates
+    def subscribe_thread():
+        try:
+            subscriber = publishing.Subscriber(url=None, topics='playerstatus')
+            logger.debug("Playback LED subscriber started")
+            while True:
+                try:
+                    topic, message = subscriber.receive()
+                    if message:  # Check if message is not empty (not a revocation)
+                        playerstatus_callback(topic, message)
+                except Exception as e:
+                    logger.error(f"Error in playback LED subscriber: {e.__class__.__name__}: {e}")
+                    time.sleep(1)  # Wait before retrying
+        except Exception as e:
+            logger.error(f"Fatal error in playback LED subscriber thread: {e.__class__.__name__}: {e}")
+
+    # Start subscriber thread
+    thread = threading.Thread(target=subscribe_thread, daemon=True)
+    thread.start()
+
+    # Register for startup pulse
+    components.gpio.gpioz.plugin.service_is_running_callbacks.register(
+        _check_device_type(device, [PWMLED], status_callback))
