@@ -129,13 +129,22 @@ def build_pin_factory():
 
 def connect_output_device(device, name, config: Dict):
     connect_func = config.get('connect', None)
+    logger.info(f"Connecting output device '{name}': connect_func = {connect_func}")
     if connect_func is None:
+        logger.info(f"No connection function specified for '{name}'")
         return
     if isinstance(connect_func, str):
         connect_func = [connect_func]
+
+    # Get optional connection parameters
+    connect_kwargs = config.get('connect_kwargs', {})
+    logger.info(f"Connection kwargs for '{name}': {connect_kwargs}")
+
     for func_name in connect_func:
+        logger.info(f"Attempting to resolve connection function '{func_name}' for '{name}'")
         try:
             func = getattr_hierarchical(components, func_name)
+            logger.info(f"Successfully resolved connection function '{func_name}' for '{name}': {func}")
         except AttributeError as e:
             logger.error(f"Connection function '{func_name}' of '{name}' does not exist: {e.__class__.__name__}: {e}")
             continue
@@ -144,7 +153,13 @@ def connect_output_device(device, name, config: Dict):
             continue
 
         try:
-            func(device)
+            logger.info(f"Calling connection function '{func_name}' for '{name}' with kwargs: {connect_kwargs}")
+            # Call connection function with device and optional kwargs
+            if connect_kwargs:
+                func(device, **connect_kwargs)
+            else:
+                func(device)
+            logger.info(f"Successfully called connection function '{func_name}' for '{name}'")
         except Exception as e:
             logger.error(f"Error in connection function '{func_name}' for output device '{name}': "
                          f"{e.__class__.__name__}: {e}\n"

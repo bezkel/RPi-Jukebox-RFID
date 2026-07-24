@@ -1,4 +1,4 @@
-# RPi-Jukebox-RFID Version 3
+﻿# RPi-Jukebox-RFID Version 3
 # Copyright (c) See file LICENSE in project root folder
 """
 Provide connector functions to hook up to some kind of Jukebox functionality and change the output device's state
@@ -10,6 +10,8 @@ an output device type.
 import inspect
 import itertools
 import logging
+import threading
+import time
 from typing import List, Callable, Union, Optional
 
 import gpiozero.tones
@@ -21,7 +23,7 @@ from components.gpio.gpioz.core.output_devices import LED, PWMLED, Buzzer, Tonal
 from components.gpio.gpioz.core.converter import VolumeToRGB
 from components.rfid.reader import RfidCardDetectState
 
-logger = logging.getLogger('gpioz')
+logger = logging.getLogger('jb.gpioz.connectivity')
 
 #: The tone to be used as buzz tone when the buzzer is an active buzzer
 BUZZ_TONE = gpiozero.tones.Tone(1000)
@@ -222,3 +224,134 @@ def register_volume_rgbled_callback(device):
 
     components.volume.pulse_control.on_volume_change_callbacks.register(
         _check_device_type(device, [RGBLED], audio_volume_change_callback))
+
+
+class _SongActivityLED:
+    """Drive a PWMLED as playback indicator with smooth, interruptible fades.
+
+    All brightness changes are executed by a single worker thread which
+    processes a small sequence of (target, fade_time, hold_time) steps.
+    A new event simply replaces the pending sequence - the worker picks up
+    the change mid-fade without spawning or cancelling threads.
+    """
+
+    def __init__(self, led_device, idle_brightness=0.05, playing_brightness=0.2,
+                 active_brightness=0.8, fade_duration=2.0, active_duration=5.0):
+        self.device = led_device
+        self.idle_brightness = float(idle_brightness)
+        self.playing_brightness = float(playing_brightness)
+        self.active_brightness = float(active_brightness)
+        self.fade_duration = float(fade_duration)
+        self.active_duration = float(active_duration)
+        self.current_song = None
+        self.current_state = None
+        # Update rate of the fade worker in steps per second
+        self._fade_fps = 50.0
+        self._cond = threading.Condition()
+        self._sequence = []
+        self._generation = 0
+        threading.Thread(target=self._worker, name='SongActivityLED', daemon=True).start()
+        # Power-on indication: brief blink, then idle brightness
+        self._enqueue([(1.0, 0.0, 0.2), (self.idle_brightness, 0.3, 0.0)])
+
+    def _enqueue(self, steps):
+        with self._cond:
+            self._sequence = list(steps)
+            self._generation += 1
+            self._cond.notify()
+
+    def _worker(self):
+        step_dt = 1.0 / self._fade_fps
+        while True:
+            with self._cond:
+                while not self._sequence:
+                    self._cond.wait()
+                target, fade_time, hold_time = self._sequence.pop(0)
+                generation = self._generation
+            start = float(self.device.value)
+            steps = max(1, int(fade_time * self._fade_fps))
+            aborted = False
+            for i in range(1, steps + 1):
+                with self._cond:
+                    if self._generation != generation:
+                        aborted = True
+                        break
+                self.device.value = min(1.0, max(0.0, start + (target - start) * i / steps))
+                time.sleep(step_dt)
+            if aborted:
+                continue
+            self.device.value = min(1.0, max(0.0, target))
+            if hold_time > 0:
+                with self._cond:
+                    # Returns early if a new sequence arrives during the hold phase
+                    self._cond.wait(timeout=hold_time)
+
+    def handle_player_status(self, status):
+        """Evaluate playerstatus updates and translate them into LED sequences"""
+        try:
+            song = status.get('file')
+            state = status.get('state')
+            song_changed = bool(song) and song != self.current_song
+            state_changed = state != self.current_state
+            if not song_changed and not state_changed:
+                return
+            logger.debug(f"Song Activity LED: state {self.current_state} -> {state}, "
+                         f"song {self.current_song} -> {song}")
+            if state == 'play':
+                if song_changed or self.current_state in ('stop', None):
+                    # New song or fresh playback start: quick ramp to peak, hold,
+                    # then settle at playing brightness
+                    self._enqueue([(self.active_brightness, 0.15, self.active_duration),
+                                   (self.playing_brightness, self.fade_duration, 0.0)])
+                elif state_changed:
+                    # Resume from pause without song change
+                    self._enqueue([(self.playing_brightness, self.fade_duration, 0.0)])
+            elif state in ('pause', 'stop') and state_changed:
+                self._enqueue([(self.idle_brightness, self.fade_duration, 0.0)])
+            if song:
+                self.current_song = song
+            self.current_state = state
+        except Exception as e:
+            logger.error(f"Song Activity LED: error processing playerstatus: {e.__class__.__name__}: {e}")
+
+
+def register_song_activity_led_callback(device, idle_brightness=0.05, playing_brightness=0.2,
+                                        active_brightness=0.8, fade_duration=2.0, active_duration=5.0):
+    """
+    Have a PWMLED indicate song activity with smooth fade effects:
+
+    * brief blink on start-up, then constant idle brightness
+    * on song start/change: peak brightness for :attr:`active_duration` seconds,
+      then fade to playing brightness
+    * on pause/stop: fade back down to idle brightness
+
+    All brightness values are in the range 0.0 to 1.0 and can be set via
+    ``connect_kwargs`` in the GPIO configuration. Set ``idle_brightness: 0.0``
+    to turn the LED fully off when nothing is playing.
+
+    Compatible devices:
+
+    * :class:`components.gpio.gpioz.core.output_devices.PWMLED`
+    """
+    import jukebox.publishing.subscriber as subscriber
+
+    if _check_device_type(device, [PWMLED], lambda: None) is None:
+        return
+
+    led_manager = _SongActivityLED(device, idle_brightness, playing_brightness,
+                                   active_brightness, fade_duration, active_duration)
+
+    def subscription_worker():
+        while True:
+            try:
+                sub = subscriber.Subscriber("inproc://PublisherToProxy", ["playerstatus"])
+                logger.debug("Song Activity LED: playerstatus subscriber started")
+                while True:
+                    topic, payload = sub.receive()
+                    if topic == 'playerstatus' and isinstance(payload, dict):
+                        led_manager.handle_player_status(payload)
+            except Exception as e:
+                logger.error(f"Song Activity LED: subscriber error, retrying: {e.__class__.__name__}: {e}")
+                time.sleep(2)
+
+    threading.Thread(target=subscription_worker, name='SongActivityLEDSub', daemon=True).start()
