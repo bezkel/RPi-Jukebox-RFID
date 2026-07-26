@@ -340,6 +340,16 @@ class PlayerMPD:
             self.mpd_client.stop()
 
     @plugs.tag
+    def stop_and_clear(self):
+        """Stop playback and clear the play queue
+
+        Intended as card removal action: after this, buttons like toggle
+        cannot revive the stopped playback - a new card is required."""
+        with self.mpd_lock:
+            self.mpd_client.stop()
+            self.mpd_client.clear()
+
+    @plugs.tag
     def pause(self, state: int = 1):
         """Enforce pause to state (1: pause, 0: resume)
 
