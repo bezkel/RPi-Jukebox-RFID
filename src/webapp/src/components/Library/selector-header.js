@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from 'react-i18next';
 
 import {
+  Alert,
   Button,
   Grid,
   Typography,
@@ -43,6 +44,11 @@ const SelectorHeader = () => {
         >
           {t('general.buttons.cancel')}
         </Button>
+      </Grid>
+      <Grid item xs={12} sx={{ marginTop: '8px' }}>
+        <Alert severity="info" sx={{ padding: '0 10px' }}>
+          {t('library.selector-header.folder-mode-hint')}
+        </Alert>
       </Grid>
     </Grid>
   );

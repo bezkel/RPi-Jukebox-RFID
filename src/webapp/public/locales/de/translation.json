@@ -140,7 +140,8 @@
       "folders": "Ordner"
     },
     "selector-header": {
-      "title": "Wähle ein Album, einen Ordner oder einen Song aus"
+      "title": "Wähle ein Album, einen Ordner oder einen Song aus",
+      "folder-mode-hint": "Tipp: Über die Ordner-Ansicht verknüpfen! Nur Ordner-Karten unterstützen das Plattenspieler-Verhalten (Karte kurz anheben, ohne dass die Musik stoppt)."
     },
     "folders": {
       "no-music": "☝️ Keine Musik vorhanden!",

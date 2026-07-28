@@ -140,7 +140,8 @@
       "folders": "Folders"
     },
     "selector-header": {
-      "title": "Select an album, folder or song"
+      "title": "Select an album, folder or song",
+      "folder-mode-hint": "Tip: link via the folder view! Only folder cards support the record-player behavior (briefly lifting the card without stopping the music)."
     },
     "folders": {
       "no-music": "☝️ No music found!",
