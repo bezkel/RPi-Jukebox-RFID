@@ -99,13 +99,58 @@ class CardRemovalTimerClass(threading.Thread):
     def _set_volume(self, volume):
         plugs.call_ignore_errors('volume', 'ctrl', 'set_volume', args=[int(round(volume))])
 
+    def _player_is_playing(self):
+        try:
+            status = plugs.call('player', 'ctrl', 'playerstatus')
+            return isinstance(status, dict) and status.get('state') == 'play'
+        except Exception as e:
+            self._logger.error(f"playerstatus failed: {e.__class__.__name__}: {e}")
+            return False
+
+    def _abort_countdown(self):
+        """Silence a running countdown: restore volume, notify subscribers (e.g. LED)"""
+        if self._in_countdown:
+            self._in_countdown = False
+            self._restore_volume()
+            self._publish({'state': 'aborted'})
+
+    def _restore_volume(self):
+        if self._saved_volume is not None:
+            self._set_volume(self._saved_volume)
+            self._saved_volume = None
+
+    def _fade_volume(self, remaining):
+        if self.fade_time and remaining <= self.fade_time:
+            if self._saved_volume is None:
+                self._saved_volume = self._get_volume()
+            if self._saved_volume is not None:
+                self._set_volume(max(0.0, self._saved_volume * remaining / self.fade_time))
+
+    def _handle_absence(self, remaining):
+        if remaining <= 0:
+            self._in_countdown = False
+            self._fired = True
+            self._publish({'state': 'ended'})
+            self.timeout_action()
+            # Restore volume after the removal action (e.g. stop) has run
+            self._restore_volume()
+        elif remaining <= self.countdown_time:
+            # Countdown reminder only makes sense while music is playing.
+            # Paused/stopped player: user is done - fire silently on time-out.
+            if self._player_is_playing():
+                self._in_countdown = True
+                self._publish({'state': 'running', 'remaining': round(remaining, 1), 'total': self.countdown_time})
+                self._fade_volume(remaining)
+            else:
+                self._abort_countdown()
+
     def run(self):
         self._logger.debug("CardRemovalTimerClass watchdog started")
         last_seen = time.monotonic()
         # No action before the first card has been placed
-        fired = True
-        in_countdown = False
-        saved_volume = None
+        self._fired = True
+        self._in_countdown = False
+        self._saved_volume = None
         while True:
             # Prevent max CPU by forced loop slow down when self.trigger.is_set() is permanently high
             time.sleep(0.2)
@@ -113,36 +158,10 @@ class CardRemovalTimerClass(threading.Thread):
             now = time.monotonic()
             if seen or self.trigger.is_set():
                 last_seen = now
-                if in_countdown:
-                    # Card returned during countdown: restore volume, notify subscribers (e.g. LED)
-                    in_countdown = False
-                    if saved_volume is not None:
-                        self._set_volume(saved_volume)
-                        saved_volume = None
-                    self._publish({'state': 'aborted'})
-                fired = False
-                continue
-            if fired:
-                continue
-            remaining = self.timeout - (now - last_seen)
-            if remaining <= 0:
-                in_countdown = False
-                fired = True
-                self._publish({'state': 'ended'})
-                self.timeout_action()
-                # Restore volume after the removal action (e.g. stop) has run
-                if saved_volume is not None:
-                    self._set_volume(saved_volume)
-                    saved_volume = None
-            elif remaining <= self.countdown_time:
-                in_countdown = True
-                self._publish({'state': 'running', 'remaining': round(remaining, 1),
-                               'total': self.countdown_time})
-                if self.fade_time and remaining <= self.fade_time:
-                    if saved_volume is None:
-                        saved_volume = self._get_volume()
-                    if saved_volume is not None:
-                        self._set_volume(max(0.0, saved_volume * remaining / self.fade_time))
+                self._abort_countdown()
+                self._fired = False
+            elif not self._fired:
+                self._handle_absence(self.timeout - (now - last_seen))
 
 
 class ReaderRunner(threading.Thread):
@@ -179,7 +198,7 @@ class ReaderRunner(threading.Thread):
         self._timer_thread = None
         if self._cfg_place_not_swipe:
             cfg_removal_delay = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,
-                                               'place_not_swipe', 'card_removal_delay', default=1.0)
+                                              'place_not_swipe', 'card_removal_delay', default=1.0)
             cfg_removal_countdown = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,
                                                   'place_not_swipe', 'card_removal_countdown', default=0.0)
             cfg_removal_fade = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,

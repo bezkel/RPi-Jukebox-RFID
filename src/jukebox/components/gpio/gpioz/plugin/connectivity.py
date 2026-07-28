@@ -331,7 +331,9 @@ class _SongActivityLED:
                 self._enqueue([(min(1.0, base + 0.1), 0.25, 0.0),
                                (max(0.0, base - 0.2), 0.25, 0.0)])
             elif state == 'aborted':
-                self._enqueue([(self.playing_brightness, 0.5, 0.0)])
+                # Back to playing brightness - or idle if playback is paused/stopped
+                target = self.playing_brightness if self.current_state == 'play' else self.idle_brightness
+                self._enqueue([(target, 0.5, 0.0)])
             # state 'ended': the player stop event handles the fade to idle
         except Exception as e:
             logger.error(f"Song Activity LED: error processing countdown: {e.__class__.__name__}: {e}")
