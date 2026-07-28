@@ -314,6 +314,28 @@ class _SongActivityLED:
         except Exception as e:
             logger.error(f"Song Activity LED: error processing playerstatus: {e.__class__.__name__}: {e}")
 
+    def handle_countdown(self, payload):
+        """Card removal countdown: pulse with linearly rising base brightness.
+
+        The closer the timeout, the brighter the pulsing - a visual reminder
+        to put the card back. On abort return to playing brightness; on
+        time-out the player stop event fades to idle via handle_player_status.
+        """
+        try:
+            state = payload.get('state')
+            if state == 'running':
+                total = float(payload.get('total') or 1.0)
+                remaining = float(payload.get('remaining') or 0.0)
+                progress = min(1.0, max(0.0, 1.0 - (remaining / total)))
+                base = self.playing_brightness + (1.0 - self.playing_brightness) * progress
+                self._enqueue([(min(1.0, base + 0.1), 0.25, 0.0),
+                               (max(0.0, base - 0.2), 0.25, 0.0)])
+            elif state == 'aborted':
+                self._enqueue([(self.playing_brightness, 0.5, 0.0)])
+            # state 'ended': the player stop event handles the fade to idle
+        except Exception as e:
+            logger.error(f"Song Activity LED: error processing countdown: {e.__class__.__name__}: {e}")
+
 
 def register_song_activity_led_callback(device, idle_brightness=0.05, playing_brightness=0.2,
                                         active_brightness=0.8, fade_duration=2.0, active_duration=5.0):
@@ -344,12 +366,14 @@ def register_song_activity_led_callback(device, idle_brightness=0.05, playing_br
     def subscription_worker():
         while True:
             try:
-                sub = subscriber.Subscriber("inproc://PublisherToProxy", ["playerstatus"])
+                sub = subscriber.Subscriber("inproc://PublisherToProxy", ["playerstatus", "rfid.countdown"])
                 logger.debug("Song Activity LED: playerstatus subscriber started")
                 while True:
                     topic, payload = sub.receive()
                     if topic == 'playerstatus' and isinstance(payload, dict):
                         led_manager.handle_player_status(payload)
+                    elif topic == 'rfid.countdown' and isinstance(payload, dict):
+                        led_manager.handle_countdown(payload)
             except Exception as e:
                 logger.error(f"Song Activity LED: subscriber error, retrying: {e.__class__.__name__}: {e}")
                 time.sleep(2)

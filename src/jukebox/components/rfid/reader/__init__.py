@@ -60,34 +60,89 @@ class CardRemovalTimerClass(threading.Thread):
     """
     A timer watchdog thread that calls timeout_action on time-out
 
+    Optional countdown phase before the time-out: the remaining time is
+    published on topic 'rfid.countdown' (e.g. for LED feedback) and the
+    volume is faded out during the last fade_time seconds. If the card
+    returns during the countdown, the volume is restored and an abort
+    event is published.
     """
-    def __init__(self, on_timeout_callback, timeout: float = 1.0, logger: logging.Logger = None):
+    def __init__(self, on_timeout_callback, timeout: float = 1.0,
+                 countdown_time: float = 0.0, fade_time: float = 0.0,
+                 logger: logging.Logger = None):
         """
         :param on_timeout_callback: The function to execute on time-out
         :param timeout: Grace period in seconds without card before the action fires
+        :param countdown_time: Publish countdown events during the last countdown_time seconds
+        :param fade_time: Fade out the volume during the last fade_time seconds
         """
         threading.Thread.__init__(self)
         self._logger = logger if logger is not None else logging.getLogger('jb.rfid.cardremove')
         self.trigger = threading.Event()
         self.timeout = max(1.0, float(timeout))
+        self.countdown_time = min(max(0.0, float(countdown_time)), self.timeout)
+        self.fade_time = min(max(0.0, float(fade_time)), self.timeout)
         self.timeout_action = on_timeout_callback
+
+    def _publish(self, payload):
+        try:
+            publishing.get_publisher().send('rfid.countdown', payload)
+        except Exception as e:
+            self._logger.error(f"Countdown publish failed: {e.__class__.__name__}: {e}")
+
+    def _get_volume(self):
+        try:
+            return plugs.call('volume', 'ctrl', 'get_volume')
+        except Exception as e:
+            self._logger.error(f"get_volume failed: {e.__class__.__name__}: {e}")
+            return None
+
+    def _set_volume(self, volume):
+        plugs.call_ignore_errors('volume', 'ctrl', 'set_volume', args=[int(round(volume))])
 
     def run(self):
         self._logger.debug("CardRemovalTimerClass watchdog started")
-        has_timed_out = True
+        last_seen = time.monotonic()
+        # No action before the first card has been placed
+        fired = True
+        in_countdown = False
+        saved_volume = None
         while True:
             # Prevent max CPU by forced loop slow down when self.trigger.is_set() is permanently high
             time.sleep(0.2)
-            # This is the actual timer:
-            # self.trigger.wait() aborts immediately when trigger.is_set becomes True
-            self.trigger.wait(self.timeout)
-            if self.trigger.is_set():
-                has_timed_out = False
-            else:
-                if not has_timed_out:
-                    self.timeout_action()
-                # Save that we have timed out before, so time-out event handler is run only on the first time out
-                has_timed_out = True
+            seen = self.trigger.wait(0.3)
+            now = time.monotonic()
+            if seen or self.trigger.is_set():
+                last_seen = now
+                if in_countdown:
+                    # Card returned during countdown: restore volume, notify subscribers (e.g. LED)
+                    in_countdown = False
+                    if saved_volume is not None:
+                        self._set_volume(saved_volume)
+                        saved_volume = None
+                    self._publish({'state': 'aborted'})
+                fired = False
+                continue
+            if fired:
+                continue
+            remaining = self.timeout - (now - last_seen)
+            if remaining <= 0:
+                in_countdown = False
+                fired = True
+                self._publish({'state': 'ended'})
+                self.timeout_action()
+                # Restore volume after the removal action (e.g. stop) has run
+                if saved_volume is not None:
+                    self._set_volume(saved_volume)
+                    saved_volume = None
+            elif remaining <= self.countdown_time:
+                in_countdown = True
+                self._publish({'state': 'running', 'remaining': round(remaining, 1),
+                               'total': self.countdown_time})
+                if self.fade_time and remaining <= self.fade_time:
+                    if saved_volume is None:
+                        saved_volume = self._get_volume()
+                    if saved_volume is not None:
+                        self._set_volume(max(0.0, saved_volume * remaining / self.fade_time))
 
 
 class ReaderRunner(threading.Thread):
@@ -125,9 +180,15 @@ class ReaderRunner(threading.Thread):
         if self._cfg_place_not_swipe:
             cfg_removal_delay = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,
                                                'place_not_swipe', 'card_removal_delay', default=1.0)
+            cfg_removal_countdown = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,
+                                                  'place_not_swipe', 'card_removal_countdown', default=0.0)
+            cfg_removal_fade = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,
+                                             'place_not_swipe', 'card_removal_fade', default=0.0)
             self._timer_thread = CardRemovalTimerClass(utils.bind_rpc_command(self._default_removal_action, dereference=False,
                                                                               logger=self._logger),
-                                                       timeout=cfg_removal_delay)
+                                                       timeout=cfg_removal_delay,
+                                                       countdown_time=cfg_removal_countdown,
+                                                       fade_time=cfg_removal_fade)
             self._timer_thread.daemon = True
             self._timer_thread.name = f"{reader_cfg_key}CRemover"
             self._timer_thread.start()
