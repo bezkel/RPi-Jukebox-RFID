@@ -190,6 +190,7 @@
 * [components.playermpd](#components.playermpd)
   * [PlayerMPD](#components.playermpd.PlayerMPD)
     * [mpd\_retry\_with\_mutex](#components.playermpd.PlayerMPD.mpd_retry_with_mutex)
+    * [stop\_and\_clear](#components.playermpd.PlayerMPD.stop_and_clear)
     * [pause](#components.playermpd.PlayerMPD.pause)
     * [next](#components.playermpd.PlayerMPD.next)
     * [rewind](#components.playermpd.PlayerMPD.rewind)
@@ -2840,6 +2841,21 @@ it shall be used for each access to mpd to ensure thread safety
 In case of a communication error the connection will be reestablished and the pending command will be repeated 2 times
 
 I think this should be refactored to a decorator
+
+
+<a id="components.playermpd.PlayerMPD.stop_and_clear"></a>
+
+#### stop\_and\_clear
+
+```python
+@plugs.tag
+def stop_and_clear()
+```
+
+Stop playback and clear the play queue
+
+Intended as card removal action: after this, buttons like toggle
+cannot revive the stopped playback - a new card is required.
 
 
 <a id="components.playermpd.PlayerMPD.pause"></a>

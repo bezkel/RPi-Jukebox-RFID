@@ -61,13 +61,15 @@ class CardRemovalTimerClass(threading.Thread):
     A timer watchdog thread that calls timeout_action on time-out
 
     """
-    def __init__(self, on_timeout_callback, logger: logging.Logger = None):
+    def __init__(self, on_timeout_callback, timeout: float = 1.0, logger: logging.Logger = None):
         """
         :param on_timeout_callback: The function to execute on time-out
+        :param timeout: Grace period in seconds without card before the action fires
         """
         threading.Thread.__init__(self)
         self._logger = logger if logger is not None else logging.getLogger('jb.rfid.cardremove')
         self.trigger = threading.Event()
+        self.timeout = max(1.0, float(timeout))
         self.timeout_action = on_timeout_callback
 
     def run(self):
@@ -78,7 +80,7 @@ class CardRemovalTimerClass(threading.Thread):
             time.sleep(0.2)
             # This is the actual timer:
             # self.trigger.wait() aborts immediately when trigger.is_set becomes True
-            self.trigger.wait(1)
+            self.trigger.wait(self.timeout)
             if self.trigger.is_set():
                 has_timed_out = False
             else:
@@ -121,8 +123,11 @@ class ReaderRunner(threading.Thread):
             self._cfg_place_not_swipe = False
         self._timer_thread = None
         if self._cfg_place_not_swipe:
+            cfg_removal_delay = cfg_rfid.getn('rfid', 'readers', reader_cfg_key,
+                                               'place_not_swipe', 'card_removal_delay', default=1.0)
             self._timer_thread = CardRemovalTimerClass(utils.bind_rpc_command(self._default_removal_action, dereference=False,
-                                                                              logger=self._logger))
+                                                                              logger=self._logger),
+                                                       timeout=cfg_removal_delay)
             self._timer_thread.daemon = True
             self._timer_thread.name = f"{reader_cfg_key}CRemover"
             self._timer_thread.start()
