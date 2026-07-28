@@ -110,7 +110,12 @@
       "no-card-id": "No card ID"
     },
     "list": {
-      "no-cards-registered": "No cards registered!"
+      "no-cards-registered": "No cards registered!",
+      "no-cards-found": "No cards match your search",
+      "search-label": "Search (ID, album, folder)",
+      "sort-label": "Sorting",
+      "sort-by-content": "Content",
+      "sort-by-id": "Card ID"
     },
     "overview": {
       "cards": "Cards",
@@ -141,7 +146,8 @@
       "no-music": "☝️ No music found!",
       "empty-folder": "This folder is empty! 🙈",
       "show-folder-content": "Show folder content",
-      "back-button-label": "Back"
+      "back-button-label": "Back",
+      "card-linked": "Card linked"
     },
     "albums": {
       "unknown-album": "Unknown album",

@@ -17,6 +17,7 @@ const FolderList = ({
   dir,
   folders,
   isSelecting,
+  linkedPaths,
   registerMusicToCard,
 }) => {
   const { t } = useTranslation();
@@ -46,6 +47,7 @@ const FolderList = ({
         <FolderListItem
           key={key}
           folder={folder}
+          hasLinkedCard={Boolean(linkedPaths?.has(folder.relpath))}
           isSelecting={isSelecting}
           registerMusicToCard={registerMusicToCard}
         />

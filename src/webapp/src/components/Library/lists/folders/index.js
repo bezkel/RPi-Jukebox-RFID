@@ -20,6 +20,7 @@ const Folders = ({
   const { t } = useTranslation();
   const { dir = ROOT_DIR } = useParams();
   const [folders, setFolders] = useState([]);
+  const [linkedPaths, setLinkedPaths] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -47,6 +48,27 @@ const Folders = ({
     fetchFolderList();
   }, [dir]);
 
+  useEffect(() => {
+    // Load the card database once to badge folders which already have a card linked
+    const fetchLinkedPaths = async () => {
+      const { result } = await request('cardsList');
+      if (!result) return;
+
+      const paths = new Set();
+      Object.keys(result).forEach((cardId) => {
+        const action = result[cardId]?.action || {};
+        const args = [].concat(action.args || []);
+        if (typeof args[0] === 'string') paths.add(args[0]);
+        ['folder', 'song_url'].forEach((key) => {
+          if (typeof action.kwargs?.[key] === 'string') paths.add(action.kwargs[key]);
+        });
+      });
+      setLinkedPaths(paths);
+    }
+
+    fetchLinkedPaths();
+  }, []);
+
   const filteredFolders = folders.filter(search);
 
   if (isLoading) return <CircularProgress />;
@@ -60,6 +82,7 @@ const Folders = ({
       dir={dir}
       folders={filteredFolders}
       isSelecting={isSelecting}
+      linkedPaths={linkedPaths}
       registerMusicToCard={registerMusicToCard}
     />
   );

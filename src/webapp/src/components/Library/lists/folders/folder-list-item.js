@@ -8,6 +8,7 @@ import {
   ListItemText,
 } from '@mui/material';
 
+import BookmarkIcon from '@mui/icons-material/Bookmark';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 
 import request from '../../../../utils/request';
@@ -16,6 +17,7 @@ import FolderTypeAvatar from './folder-type-avatar';
 
 const FolderListItem = ({
   folder,
+  hasLinkedCard,
   isSelecting,
   registerMusicToCard,
 }) => {
@@ -60,7 +62,19 @@ const FolderListItem = ({
     >
       <ListItemButton onClick={() => (isSelecting ? registerItemToCard() : playItem())}>
         <FolderTypeAvatar type={type} />
-        <ListItemText primary={name} />
+        <ListItemText
+          primary={name}
+          secondary={hasLinkedCard
+            ? <>
+                <BookmarkIcon
+                  color="primary"
+                  sx={{ fontSize: 14, marginRight: '4px', verticalAlign: 'text-bottom' }}
+                />
+                {t('library.folders.card-linked')}
+              </>
+            : undefined
+          }
+        />
       </ListItemButton>
     </ListItem>
   );

@@ -3663,12 +3663,15 @@ A timer watchdog thread that calls timeout_action on time-out
 #### \_\_init\_\_
 
 ```python
-def __init__(on_timeout_callback, logger: logging.Logger = None)
+def __init__(on_timeout_callback,
+             timeout: float = 1.0,
+             logger: logging.Logger = None)
 ```
 
 **Arguments**:
 
 - `on_timeout_callback`: The function to execute on time-out
+- `timeout`: Grace period in seconds without card before the action fires
 
 <a id="components.rfid.cards"></a>
 

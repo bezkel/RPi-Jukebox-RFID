@@ -110,7 +110,12 @@
       "no-card-id": "Keine Karten-ID vorhanden"
     },
     "list": {
-      "no-cards-registered": "Es wurden noch keine Karten registriert!"
+      "no-cards-registered": "Es wurden noch keine Karten registriert!",
+      "no-cards-found": "Keine Karten passend zur Suche gefunden",
+      "search-label": "Suchen (ID, Album, Ordner)",
+      "sort-label": "Sortierung",
+      "sort-by-content": "Inhalt",
+      "sort-by-id": "Karten-ID"
     },
     "overview": {
       "cards": "Karten",
@@ -141,7 +146,8 @@
       "no-music": "☝️ Keine Musik vorhanden!",
       "empty-folder": "Dieser Ordner ist leer! 🙈",
       "show-folder-content": "Zeige den Ordnerinhalt an",
-      "back-button-label": "Zurück"
+      "back-button-label": "Zurück",
+      "card-linked": "Karte verknüpft"
     },
     "albums": {
       "unknown-album": "Unbekanntes Album",
