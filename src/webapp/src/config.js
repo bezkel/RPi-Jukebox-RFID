@@ -32,6 +32,7 @@ const JUKEBOX_ACTIONS_MAP = {
     commands: {
       play_album: {},
       play_folder: {},
+      play_card: {},
       play_single: {},
     }
   },

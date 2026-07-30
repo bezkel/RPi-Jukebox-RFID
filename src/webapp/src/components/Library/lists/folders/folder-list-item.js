@@ -36,7 +36,8 @@ const FolderListItem = ({
 
   const registerItemToCard = () => {
     switch(type) {
-      case 'directory': return registerMusicToCard('play_folder', { folder: relpath, recursive: true });
+      // play_card wraps play_folder with second-swipe / place-not-swipe handling
+      case 'directory': return registerMusicToCard('play_card', { folder: relpath });
       case 'file': return registerMusicToCard('play_single', { song_url: relpath });
       // TODO: Add missing Podcast
       // TODO: Add missing Stream

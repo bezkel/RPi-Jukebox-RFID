@@ -57,6 +57,7 @@
           "commands": {
             "play_album": "Selected album",
             "play_folder": "Selected folder",
+            "play_card": "Selected folder (record-player mode)",
             "play_single": "Selected song"
           },
           "button-label": "Select music",

@@ -53,7 +53,7 @@ const SelectPlayMusic = ({
       }
       <Grid item xs={12}>
         {command === 'play_album' && <SelectedAlbum values={values} />}
-        {command === 'play_folder' && <SelectedFolder values={values} />}
+        {(command === 'play_folder' || command === 'play_card') && <SelectedFolder values={values} />}
         {command === 'play_single' && <SelectedSingle values={values} />}
       </Grid>
 

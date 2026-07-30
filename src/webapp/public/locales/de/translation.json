@@ -57,6 +57,7 @@
           "commands": {
             "play_album": "Ausgewähltes Album",
             "play_folder": "Ausgewählter Ordner",
+            "play_card": "Ausgewählter Ordner (Plattenspieler-Modus)",
             "play_single": "Ausgewählter Song"
           },
           "button-label": "Musik auswählen",

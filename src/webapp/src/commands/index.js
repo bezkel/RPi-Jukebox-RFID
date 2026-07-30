@@ -71,6 +71,12 @@ const commands = {
     method: 'play_folder',
     argKeys: ['folder']
   },
+  play_card: {
+    _package: 'player',
+    plugin: 'ctrl',
+    method: 'play_card',
+    argKeys: ['folder']
+  },
   play_album: {
     _package: 'player',
     plugin: 'ctrl',
